@@ -5,17 +5,17 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from torch.utils.data import DataLoader
 
-from common.poi_dataset import POIDataset
-from configs.globals import CATEGORIES_MAP
-from configs.model import InputsConfig
-from configs.category_config import CfgCategoryTraining
+from PoiMtlNet_Novo.src.common.poi_dataset import POIDataset
+from PoiMtlNet_Novo.src.configs.globals import CATEGORIES_MAP
+from PoiMtlNet_Novo.src.configs.model import InputsConfig
+from PoiMtlNet_Novo.src.configs.category_config import CfgCategoryTraining
 
 
 def load_data(path: str) -> tuple[np.ndarray, np.ndarray]:
-    df = pd.read_parquet(path)
+    df = pd.read_csv(path)
     inv_map = {v: k for k, v in CATEGORIES_MAP.items()}
     df['label'] = df['category'].map(inv_map)
-    df.drop(columns=['category'], inplace=True)
+    df.drop(columns=['category','placeid'], inplace=True)
     feature_cols = df.columns[:InputsConfig.EMBEDDING_DIM]
     X = df[feature_cols].values
     y = df['label'].values

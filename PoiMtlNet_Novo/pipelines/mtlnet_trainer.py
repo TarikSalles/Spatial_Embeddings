@@ -5,7 +5,7 @@ import torch
 import argparse
 import logging
 
-from src.configs.model import MTLModelConfig
+from src.configs.model import MTLModelConfig, ModelParameters
 from src.configs.paths import OUTPUT_DIR, RESULTS_ROOT
 from src.etl.mtl.create_fold import create_folds
 from src.train.mtlnet.mtl_train import train_with_cross_validation
@@ -17,9 +17,16 @@ logging.basicConfig(level=logging.INFO)
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Treina MTLNet para um estado específico")
     parser.add_argument(
-        "state",
+        "--state",
         type=str,
+        default="florida",
         help="Nome do estado (ex: montana, california, florida)"
+    )
+    parser.add_argument(
+        "--features",
+        type=int,
+        default=ModelParameters.INPUT_DIM,
+        help=f"Embedding feature dimension (default: {ModelParameters.INPUT_DIM})"
     )
     args = parser.parse_args()
 
@@ -37,10 +44,13 @@ if __name__ == '__main__':
 
     logging.info(f'Criando folds para {state}')
 
+    logging.info(f'Feature dimension: {args.features}')
+
     fold_results, folds_path = create_folds(
         next_data_path,
         category_data_path,
         k_splits=MTLModelConfig.K_FOLDS,
+        embedding_dim=args.features,
         save_folder=None,
     )
 
@@ -68,7 +78,8 @@ if __name__ == '__main__':
             history=history,
             num_classes=MTLModelConfig.NUM_CLASSES,
             num_epochs=MTLModelConfig.EPOCHS,
-            learning_rate=MTLModelConfig.LEARNING_RATE
+            learning_rate=MTLModelConfig.LEARNING_RATE,
+            feature_size=args.features
         )
 
     save_path = os.path.join(RESULTS_ROOT, state)

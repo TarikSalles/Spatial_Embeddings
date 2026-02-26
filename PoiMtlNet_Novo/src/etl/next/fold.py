@@ -6,14 +6,14 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.utils.class_weight import compute_class_weight
 from torch.utils.data import DataLoader, WeightedRandomSampler
 
-from common.poi_dataset import POIDataset
-from configs.globals import CATEGORIES_MAP
-from configs.model import InputsConfig
-from configs.next_config import CfgNextTraining, CfgNextModel
+from PoiMtlNet_Novo.src.common.poi_dataset import POIDataset
+from PoiMtlNet_Novo.src.configs.globals import CATEGORIES_MAP
+from PoiMtlNet_Novo.src.configs.model import InputsConfig
+from PoiMtlNet_Novo.src.configs.next_config import CfgNextTraining, CfgNextModel
 
 
 def load_data(path: str) -> tuple[np.ndarray, np.ndarray]:
-    df = pd.read_parquet(path)
+    df = pd.read_csv(path)
     inv_map = {v: k for k, v in CATEGORIES_MAP.items()}
     df['label'] = df['next_category'].map(inv_map)
     df.drop(columns=['userid', 'next_category'], inplace=True)

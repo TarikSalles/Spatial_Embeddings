@@ -282,7 +282,8 @@ def train_with_cross_validation(dataloaders: dict[int, dict[str, SuperInputData]
                                 num_classes: int,
                                 num_epochs: int,
                                 learning_rate: float,
-                                gradient_accumulation_steps: int = 2):
+                                gradient_accumulation_steps: int = 2,
+                                feature_size: int = ModelParameters.INPUT_DIM):
     """
     Train with cross-validation with efficient batching and gradient accumulation.
 
@@ -302,7 +303,7 @@ def train_with_cross_validation(dataloaders: dict[int, dict[str, SuperInputData]
 
         # Initialize model with enhanced weight initialization
         model = MTLnet(
-            feature_size=ModelParameters.INPUT_DIM,
+            feature_size=feature_size,
             shared_layer_size=ModelParameters.SHARED_LAYER_SIZE,
             num_classes=MTLModelConfig.NUM_CLASSES,
             num_heads=ModelParameters.NUM_HEADS,

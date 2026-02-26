@@ -95,7 +95,8 @@ def map_categories(y: Union[pd.DataFrame, pd.Series]) -> Union[int, np.ndarray, 
 
 
 def convert_to_tensors(x: pd.DataFrame, y: Union[pd.DataFrame, pd.Series],
-                       task_type: str) -> Tuple[torch.Tensor, torch.Tensor]:
+                       task_type: str,
+                       embedding_dim: int = InputsConfig.EMBEDDING_DIM) -> Tuple[torch.Tensor, torch.Tensor]:
     """Convert pandas objects to PyTorch tensors with appropriate shapes"""
     # Convert to contiguous array first for better memory layout
     x_values = np.ascontiguousarray(x.values, dtype=np.float32)
@@ -107,9 +108,9 @@ def convert_to_tensors(x: pd.DataFrame, y: Union[pd.DataFrame, pd.Series],
 
     # Reshape based on task type
     if task_type == 'next':
-        x_tensor = x_tensor.view(-1, 9, InputsConfig.EMBEDDING_DIM)
+        x_tensor = x_tensor.view(-1, 9, embedding_dim)
     else:  # category
-        x_tensor = x_tensor.view(-1, 1, InputsConfig.EMBEDDING_DIM)
+        x_tensor = x_tensor.view(-1, 1, embedding_dim)
 
     return x_tensor, y_tensor
 
@@ -154,7 +155,7 @@ def create_folds(
         path_category_input: str,
         k_splits: int = 5,
         batch_size: int = MTLModelConfig.BATCH_SIZE,
-        target_column_start: int = InputsConfig.EMBEDDING_DIM*InputsConfig.SLIDE_WINDOW,
+        embedding_dim: int = InputsConfig.EMBEDDING_DIM,
         random_state: int = 42,
         save_folder: Optional[str] = None
 ) -> tuple[dict[int, dict[str, SuperInputData]], str]:
@@ -165,12 +166,13 @@ def create_folds(
         path_category_input: Path to the category POI input CSV
         k_splits: Number of folds for cross-validation
         batch_size: Batch size for DataLoaders
-        target_column_start: Index where target columns start in next POI data
+        embedding_dim: Dimension of the embedding vectors
         random_state: Random seed for reproducibility
 
     Returns:
         Dictionary with fold indices mapping to task data
     """
+    target_column_start = embedding_dim * InputsConfig.SLIDE_WINDOW
     # Set seeds for reproducibility
     torch.manual_seed(random_state)
     np.random.seed(random_state)
@@ -229,8 +231,25 @@ def create_folds(
     fold_idx = 0
 
     # Convert to tensors
-    x_next_tensor, y_next_tensor = convert_to_tensors(x_next, y_next, 'next')
-    x_category_tensor, y_category_tensor = convert_to_tensors(x_category, y_category, 'category')
+    x_next_tensor, y_next_tensor = convert_to_tensors(x_next, y_next, 'next', embedding_dim)
+    x_category_tensor, y_category_tensor = convert_to_tensors(x_category, y_category, 'category', embedding_dim)
+
+    # --- feature-count diagnostics ---
+    expected_next_raw   = InputsConfig.SLIDE_WINDOW * embedding_dim
+    expected_cat_raw    = 1 * embedding_dim
+
+    logger.info(
+        f"[Next task]     raw features in data: {x_next.shape[1]} | "
+        f"expected by model: {expected_next_raw} "
+        f"({InputsConfig.SLIDE_WINDOW} steps × {embedding_dim} dims) | "
+        f"tensor shape (samples, seq, dim): {tuple(x_next_tensor.shape)}"
+    )
+    logger.info(
+        f"[Category task] raw features in data: {x_category.shape[1]} | "
+        f"expected by model: {expected_cat_raw} "
+        f"(1 step × {embedding_dim} dims) | "
+        f"tensor shape (samples, seq, dim): {tuple(x_category_tensor.shape)}"
+    )
 
     for (train_next_idx, test_next_idx), (train_place_idx, test_place_idx) in zip(
             next_skf.split(x_next, y_next),
@@ -242,12 +261,12 @@ def create_folds(
         next_train_loader = create_dataloader(
             x_next_tensor, y_next_tensor, train_next_idx, batch_size)
         next_val_loader = create_dataloader(
-            x_next_tensor, y_next_tensor, test_next_idx, batch_size)
+            x_next_tensor, y_next_tensor, test_next_idx, batch_size, shuffle=False)
 
         category_train_loader = create_dataloader(
             x_category_tensor, y_category_tensor, train_place_idx, batch_size)
         category_val_loader = create_dataloader(
-            x_category_tensor, y_category_tensor, test_place_idx, batch_size)
+            x_category_tensor, y_category_tensor, test_place_idx, batch_size, shuffle=False)
 
         # Create input data objects
         next_data = SuperInputData(

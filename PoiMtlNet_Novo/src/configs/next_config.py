@@ -18,7 +18,7 @@ class CfgNextModel:
 
 
 class CfgNextTraining:
-    BATCH_SIZE = 2**10  # 512
-    EPOCHS = 100
+    BATCH_SIZE = 2**11  # 512
+    EPOCHS = 50
     K_FOLDS = 5
     SEED = 42

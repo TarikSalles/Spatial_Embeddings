@@ -6,19 +6,19 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from torch_geometric.data import DataLoader
 
-from configs.globals import DEVICE
-from configs.model import InputsConfig
+from PoiMtlNet_Novo.src.configs.globals import DEVICE
+from PoiMtlNet_Novo.src.configs.model import InputsConfig
 
-from configs.category_config import CfgCategoryModel, CfgCategoryHyperparams, CfgCategoryTraining
-from model.category.category_head_enhanced import CategoryHeadGated, CategoryHeadResidual, CategoryHeadEnsemble, \
+from PoiMtlNet_Novo.src.configs.category_config import CfgCategoryModel, CfgCategoryHyperparams, CfgCategoryTraining
+from PoiMtlNet_Novo.src.model.category.category_head_enhanced import CategoryHeadGated, CategoryHeadResidual, CategoryHeadEnsemble, \
     CategoryHeadAttentionPooling
-from train.category.evaluation import evaluate
-from train.category.trainer import train
-from model.category.CategoryHeadTransformer import CategoryHeadTransformer
-from configs.next_config import CfgNextModel
-from common.calc_flops.calculate_model_flops import calculate_model_flops
-from common.ml_history.metrics import MLHistory, FlopsMetrics
-from common.ml_history.parms.neural import NeuralParams
+from PoiMtlNet_Novo.src.train.category.evaluation import evaluate
+from PoiMtlNet_Novo.src.train.category.trainer import train
+from PoiMtlNet_Novo.src.model.category.CategoryHeadTransformer import CategoryHeadTransformer
+from PoiMtlNet_Novo.src.configs.next_config import CfgNextModel
+from PoiMtlNet_Novo.src.common.calc_flops.calculate_model_flops import calculate_model_flops
+from PoiMtlNet_Novo.src.common.ml_history.metrics import MLHistory, FlopsMetrics
+from PoiMtlNet_Novo.src.common.ml_history.parms.neural import NeuralParams
 
 
 def run_cv(
@@ -31,6 +31,7 @@ def run_cv(
         model = CategoryHeadEnsemble(
             input_dim=CfgCategoryModel.INPUT_DIM,
             num_classes=CfgCategoryModel.NUM_CLASSES,
+            dropout=CfgCategoryModel.DROPOUT,
         ).to(DEVICE)
 
         y_all = np.concatenate([y.numpy() for _, y in train_loader])

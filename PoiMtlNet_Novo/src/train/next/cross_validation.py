@@ -4,17 +4,17 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
 from torch.utils.data import DataLoader
 
-from configs.globals import DEVICE
-from configs.model import InputsConfig
+from PoiMtlNet_Novo.src.configs.globals import DEVICE
+from PoiMtlNet_Novo.src.configs.model import InputsConfig
 
-from configs.next_config import CfgNextModel, CfgNextHyperparams, CfgNextTraining
-from model.next.next_head_enhanced import NextHeadHybrid, NextHeadGRU, NextHeadTemporalCNN, NextHeadLSTM
-from train.next.evaluation import evaluate
-from train.next.trainer import train
-from model.next.next_head import NextHeadSingle
-from common.calc_flops.calculate_model_flops import calculate_model_flops
-from common.ml_history.metrics import MLHistory, FlopsMetrics
-from common.ml_history.parms.neural import NeuralParams
+from PoiMtlNet_Novo.src.configs.next_config import CfgNextModel, CfgNextHyperparams, CfgNextTraining
+from PoiMtlNet_Novo.src.model.next.next_head_enhanced import NextHeadHybrid, NextHeadGRU, NextHeadTemporalCNN, NextHeadLSTM
+from PoiMtlNet_Novo.src.train.next.evaluation import evaluate
+from PoiMtlNet_Novo.src.train.next.trainer import train
+from PoiMtlNet_Novo.src.model.next.next_head import NextHeadSingle
+from PoiMtlNet_Novo.src.common.calc_flops.calculate_model_flops import calculate_model_flops
+from PoiMtlNet_Novo.src.common.ml_history.metrics import MLHistory, FlopsMetrics
+from PoiMtlNet_Novo.src.common.ml_history.parms.neural import NeuralParams
 
 import torch
 import torch.nn as nn
@@ -42,7 +42,7 @@ def run_cv(
 
         criterion = nn.CrossEntropyLoss(
             reduction='mean',
-            weight=alpha,
+            # weight=alpha,
         )
 
         # criterion = FocalLoss(gamma=2.0, alpha=alpha, reduction='mean')

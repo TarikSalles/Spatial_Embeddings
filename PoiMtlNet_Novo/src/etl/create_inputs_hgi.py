@@ -179,7 +179,7 @@ def generate_sequences_dataframe(users_ids: List[int], sequences: pd.DataFrame, 
 
     # Save to CSV with proper error handling
     try:
-        nextpoi_sequences.to_csv(output_path, index=False)
+        nextpoi_sequences.to_parquet(output_path, index=False)
         print(f'Success: nextpoi_sequences saved at {output_path}\n')
     except IOError as e:
         print(f"Error saving to {output_path}: {str(e)}")
@@ -192,7 +192,6 @@ def processing_sequences_next(df_nextpoi_sequences: pd.DataFrame,
                               embeddings_with_category: pd.DataFrame,
                               embeddings_without_category: pd.DataFrame,
                               save_step: int = 10000) -> pd.DataFrame:
-
     print(output_path)
     """
     Generate input data for next POI prediction model using batch processing,
@@ -208,7 +207,8 @@ def processing_sequences_next(df_nextpoi_sequences: pd.DataFrame,
     Returns:
         DataFrame of generated input data (reads entire CSV at end for return)
     """
-    EMB_DIM = InputsConfig.EMBEDDING_DIM
+    #
+    EMB_DIM = embeddings_without_category.shape[1]
     SLID = InputsConfig.SLIDE_WINDOW
 
     # Build column names: 0,1,...,EMB_DIM*SLID-1, then 'next_category', 'userid'
@@ -276,8 +276,6 @@ def processing_sequences_next(df_nextpoi_sequences: pd.DataFrame,
             rows_to_write.append(
                 list(flat) + [next_cat, str(row.name)]
             )
-
-
 
         # write batch
         writer.writerows(rows_to_write)
@@ -364,11 +362,10 @@ def generate_next_input(df_embb, df_filter,
         embeddings_with_category['category'] = 'None'
     embeddings_with_category.index = embeddings_with_category.index.astype(str)
 
-
     # 2) detectar automaticamente as colunas numéricas dos embeddings
     num_cols = [c for c in embeddings_with_category.columns if str(c).isdigit()]
-    EMB_DIM = len(num_cols)            # aqui pode ser 106
-    SLID = InputsConfig.SLIDE_WINDOW   # permanece como está
+    EMB_DIM = len(num_cols)  # aqui pode ser 106
+    SLID = InputsConfig.SLIDE_WINDOW  # permanece como está
 
     # 3) construir os dois DFs alinhados
     embeddings_without_category = embeddings_with_category[num_cols].copy()
@@ -398,35 +395,25 @@ def generate_category_input(df_embb: pd.DataFrame, category_path: str):
 
 from concurrent.futures import ProcessPoolExecutor
 
-
 from concurrent.futures import ProcessPoolExecutor
 
-
 from sklearn.decomposition import PCA
-def process_state(state):
+
+
+def process_state(state, cat_embeddings=("poi", "loc", "time"), next_embeddings=("poi", "loc", "time")):
     print(f"[START] Processando estado: {state}")
+    print(f"  Category embeddings: {cat_embeddings}")
+    print(f"  Next embeddings: {next_embeddings}")
 
     # Embeddings puros
-    df_loc_src = pd.read_csv(f"{OUTPUT_DIR}/{state}/location_embedding.csv")      # loc (128D)
-    df_poi     = pd.read_csv(f"{OUTPUT_DIR}/{state}/embeddings.csv")  # poi (128D)
-    time_emb   = pd.read_csv(f"{OUTPUT_DIR}/{state}/time_embedding.csv")          # time (128D)
-
-    # Garante mesmo tamanho entre as três fontes
-    min_len = min(len(df_loc_src), len(df_poi), len(time_emb))
-    if len(df_loc_src) != min_len:
-        df_loc_src = df_loc_src.iloc[:min_len].reset_index(drop=True)
-    if len(df_poi) != min_len:
-        df_poi = df_poi.iloc[:min_len].reset_index(drop=True)
-    if len(time_emb) != min_len:
-        time_emb = time_emb.iloc[:min_len].reset_index(drop=True)
+    df_loc_src = pd.read_csv(f"{OUTPUT_DIR}/{state}/location_embedding.csv")  # loc (64D)
+    df_poi = pd.read_csv(f"{OUTPUT_DIR}/{state}/embeddings.csv")  # poi (64D)
+    time_emb = pd.read_csv(f"{OUTPUT_DIR}/{state}/time_embedding.csv")  # time (64D)
 
     # placeid como string
-    if "placeid" in df_loc_src.columns:
-        df_loc_src["placeid"] = df_loc_src["placeid"].astype(str)
-    if "placeid" in df_poi.columns:
-        df_poi["placeid"] = df_poi["placeid"].astype(str)
-    if "placeid" in time_emb.columns:
-        time_emb["placeid"] = time_emb["placeid"].astype(str)
+    for df in [df_loc_src, df_poi, time_emb]:
+        if "placeid" in df.columns:
+            df["placeid"] = df["placeid"].astype(str)
 
     # Colunas numéricas
     num_cols_loc = sorted([c for c in df_loc_src.columns if str(c).isdigit()],
@@ -436,83 +423,131 @@ def process_state(state):
     num_cols_time = sorted([c for c in time_emb.columns if str(c).isdigit()],
                            key=lambda x: int(x))
 
-    X_loc  = df_loc_src[num_cols_loc].astype(np.float32).to_numpy()
-    X_poi  = df_poi[num_cols_poi].astype(np.float32).to_numpy()
-    X_time = time_emb[num_cols_time].astype(np.float32).to_numpy()
+    # Deduplicate by placeid and rename numeric cols to avoid suffix collisions on merge
+    loc_df = df_loc_src[["placeid"] + num_cols_loc].drop_duplicates("placeid")
+    loc_df = loc_df.rename(columns={c: f"loc_{c}" for c in num_cols_loc})
+
+    poi_df = df_poi[["placeid"] + num_cols_poi].drop_duplicates("placeid")
+    poi_df = poi_df.rename(columns={c: f"poi_{c}" for c in num_cols_poi})
+
+    time_df = time_emb[["placeid"] + num_cols_time].drop_duplicates("placeid")
+    time_df = time_df.rename(columns={c: f"time_{c}" for c in num_cols_time})
+
+    # Inner-join all three on placeid to guarantee correct row alignment
+    merged = (loc_df
+              .merge(poi_df, on="placeid", how="inner")
+              .merge(time_df, on="placeid", how="inner"))
+
+    # Attach category from whichever source has it
+    cat_src = None
+    if "category" in df_loc_src.columns:
+        cat_src = df_loc_src[["placeid", "category"]].drop_duplicates("placeid")
+    elif "category" in df_poi.columns:
+        cat_src = df_poi[["placeid", "category"]].drop_duplicates("placeid")
+
+    if cat_src is not None:
+        merged = merged.merge(cat_src, on="placeid", how="left")
+        merged["category"] = merged["category"].fillna("None")
+    else:
+        merged["category"] = "None"
+
+    loc_cols_tagged = [f"loc_{c}" for c in num_cols_loc]
+    poi_cols_tagged = [f"poi_{c}" for c in num_cols_poi]
+    time_cols_tagged = [f"time_{c}" for c in num_cols_time]
+
+    X_loc = merged[loc_cols_tagged].astype(np.float32).to_numpy()
+    X_poi = merged[poi_cols_tagged].astype(np.float32).to_numpy()
+    X_time = merged[time_cols_tagged].astype(np.float32).to_numpy()
 
     # Sanity checks
-    if X_loc.shape[1] != X_time.shape[1]:
-        raise ValueError(f"Dim loc={X_loc.shape[1]} != Dim time={X_time.shape[1]}")
-    if X_poi.shape[1] != X_time.shape[1]:
-        raise ValueError(f"Dim poi={X_poi.shape[1]} != Dim time={X_time.shape[1]}")
+    assert X_loc.shape[1] > 0 and X_poi.shape[1] > 0 and X_time.shape[1] > 0
+
+    emb_map = {"poi": X_poi, "loc": X_loc, "time": X_time}
 
     # ================= CATEGORY =================
-    # Category embedding = soma(location + time)
-    X_cat = X_loc + X_time                  # (N, 128)
+    # Category embedding = concat of selected embeddings
+    X_cat = np.hstack([emb_map[e] for e in cat_embeddings])
     CAT_DIM = X_cat.shape[1]
+    print(f"  Category dim: {CAT_DIM} (from {cat_embeddings})")
     cat_cols = [str(i) for i in range(CAT_DIM)]
 
     df_cat_emb = pd.DataFrame(X_cat, columns=cat_cols)
-    df_cat_emb["placeid"] = df_loc_src["placeid"].astype(str)
-
-    # category vem do loc (mesmo checkin)
-    if "category" in df_loc_src.columns:
-        df_cat_emb["category"] = df_loc_src["category"]
-    else:
-        df_cat_emb["category"] = "None"
+    df_cat_emb["placeid"] = merged["placeid"].astype(str)
+    df_cat_emb["category"] = merged["category"]
 
     # ================= NEXT =================
-    # Next embedding = soma(time + poi)
-    X_next = X_poi + X_time + X_loc           # (N, 128)
+    # Next embedding = concat of selected embeddings
+    X_next = np.hstack([emb_map[e] for e in next_embeddings])
     NEXT_DIM = X_next.shape[1]
+    print(f"  Next dim: {NEXT_DIM} (from {next_embeddings})")
     next_cols = [str(i) for i in range(NEXT_DIM)]
 
     df_next_emb = pd.DataFrame(X_next, columns=next_cols)
-    df_next_emb["placeid"] = df_cat_emb["placeid"].astype(str)
-    df_next_emb["category"] = df_cat_emb["category"]
+    df_next_emb["placeid"] = merged["placeid"].astype(str)
+    df_next_emb["category"] = merged["category"]
 
     # Paths de saída
     output_path = f"{OUTPUT_DIR}/{state}/pre-processing/"
     os.makedirs(output_path, exist_ok=True)
 
     category_input_path = f"{output_path}category-input.csv"
-    sequences_path      = f"{output_path}poi-sequences.csv"
-    next_input_path     = f"{output_path}next-input.csv"
+    sequences_path = f"{output_path}poi-sequences.csv"
+    next_input_path = f"{output_path}next-input.csv"
 
     # Filtro de check-ins
     df_filter = pd.read_csv(f"{OUTPUT_DIR}/{state}/filtrado.csv")
 
-    # CATEGORY: agora usando loc+time
+    # CATEGORY
     generate_category_input(df_cat_emb, category_input_path)
 
-    # NEXT: usando poi+time
+    # NEXT
     generate_next_input(df_next_emb, df_filter, sequences_path, next_input_path)
 
     gc.collect()
     print(f"[END] Estado {state} processado.")
 
 
-
-
 if __name__ == "__main__":
     import argparse
     from concurrent.futures import ProcessPoolExecutor
+
+    VALID_EMBEDDINGS = {"poi", "loc", "time"}
+
+    def parse_embeddings(value: str) -> tuple:
+        parts = tuple(v.strip() for v in value.split(","))
+        for p in parts:
+            if p not in VALID_EMBEDDINGS:
+                raise argparse.ArgumentTypeError(
+                    f"Invalid embedding '{p}'. Choose from: {VALID_EMBEDDINGS}"
+                )
+        return parts
 
     parser = argparse.ArgumentParser(
         description="Gera category-input, poi-sequences e next-input para um ou mais estados"
     )
     parser.add_argument(
-        "states", nargs="+", type=str,
+        "states", nargs="*", type=str,
+        default=["florida"],
         help="Lista de estados. Ex: montana california florida"
     )
     parser.add_argument(
-        "--max-workers", type=int, default=4,
-        help="Número de processos em paralelo (default=4)"
+        "--category", type=parse_embeddings, default=("poi", "loc", "time"),
+        help="Comma-separated embeddings for category task (default: poi,loc,time)"
+    )
+    parser.add_argument(
+        "--next", type=parse_embeddings, default=("poi", "loc", "time"),
+        help="Comma-separated embeddings for next task (default: poi,loc,time)"
+    )
+    parser.add_argument(
+        "--max-workers", type=int, default=8,
+        help="Número de processos em paralelo (default=8)"
     )
     args = parser.parse_args()
 
     states = [s.lower().strip() for s in args.states]
     print(f"[INFO] process_state para: {states}")
+    print(f"[INFO] Category embeddings: {args.category}")
+    print(f"[INFO] Next embeddings: {args.next}")
 
-    with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
-        executor.map(process_state, states)
+    for state in states:
+        process_state(state, cat_embeddings=args.category, next_embeddings=args.next)

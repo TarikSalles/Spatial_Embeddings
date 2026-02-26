@@ -5,12 +5,12 @@ from typing import List, Tuple, Optional
 
 import joblib
 
-from configs.paths import IoPaths, RESULTS_ROOT, EmbeddingEngine
-from configs.next_config import CfgNextTraining, CfgNextHyperparams
-from etl.next.fold import load_data, create_folds
-from train.next.cross_validation import run_cv
-from common.ml_history.metrics import MLHistory
-from common.ml_history.utils.dataset import DatasetHistory
+from PoiMtlNet_Novo.src.configs.paths import IoPaths, RESULTS_ROOT, EmbeddingEngine
+from PoiMtlNet_Novo.src.configs.next_config import CfgNextTraining, CfgNextHyperparams
+from PoiMtlNet_Novo.src.etl.next.fold import load_data, create_folds
+from PoiMtlNet_Novo.src.train.next.cross_validation import run_cv
+from PoiMtlNet_Novo.src.common.ml_history.metrics import MLHistory
+from PoiMtlNet_Novo.src.common.ml_history.utils.dataset import DatasetHistory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -112,12 +112,12 @@ def train_next_model(
 if __name__ == '__main__':
     # Define configurations to train: [(state, embedding_engine), ...]
     TRAINING_CONFIGS: List[Tuple[str, EmbeddingEngine]] = [
-        # ("florida", EmbeddingEngine.HGI),
+        ("florida", EmbeddingEngine.HGI),
         # ("florida", EmbeddingEngine.HMRM),
         # ("alabama", EmbeddingEngine.DGI),
         # ("arizona", EmbeddingEngine.DGI),
         # ("georgia", EmbeddingEngine.DGI),
-        ("alabama", EmbeddingEngine.DGI),
+        # ("alabama", EmbeddingEngine.DGI),
         # ("california", EmbeddingEngine.DGI),
         # ("texas", EmbeddingEngine.DGI),
     ]
